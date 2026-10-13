@@ -1,0 +1,15 @@
+[Unit]
+Description=Gree AC controller daemon (serves the Plasma applet over D-Bus)
+Documentation=https://github.com/kyan0045/gree-ac-plasma
+Documentation=https://github.com/cmroche/greeclimate
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/gree-ac-plasma
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

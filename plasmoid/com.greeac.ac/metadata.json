@@ -1,0 +1,19 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "kyan0045"
+            }
+        ],
+        "Category": "System Information",
+        "Description": "Control Gree air conditioners from the panel",
+        "EnabledByDefault": false,
+        "Icon": "temperature-normal",
+        "Id": "com.greeac.ac",
+        "License": "MIT",
+        "Name": "Gree AC",
+        "Version": "0.1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

@@ -1,0 +1,24 @@
+[package]
+name = "gree-ac-plasma"
+version = "0.1.0"
+authors = ["kyan0045"]
+edition = "2024"
+rust-version = "1.89"
+description = "Controller daemon and Plasma applet backend for Gree air conditioners"
+license = "MIT"
+repository = "https://github.com/kyan0045/gree-ac-plasma"
+readme = "README.md"
+
+[dependencies]
+aes = "0.8"
+aes-gcm = "0.10"
+base64 = "0.22"
+ecb = { version = "0.1", features = ["alloc", "block-padding"] }
+env_logger = "0.11"
+futures = "0.3"
+if-addrs = "0.13"
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "time", "sync", "signal"] }
+zbus = "5"
