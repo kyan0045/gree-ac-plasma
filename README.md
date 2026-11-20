@@ -1,8 +1,8 @@
 # gree-ac-plasma
 
 A Rust controller daemon plus a native Plasma 6 applet for Gree air
-conditioners on Linux (KDE Plasma / Wayland). It talks to the units directly
-over the local network using Gree's own UDP protocol.
+conditioners on Linux (KDE Plasma 6, Wayland or X11). It talks to the units
+directly over the local network using Gree's own UDP protocol.
 
 It was built for a pair of `GWH12AWBXB-K6DNA1F/I` units and can drive both at
 once, or each separately.
@@ -12,16 +12,18 @@ once, or each separately.
 - **Native panel widget** ("Gree AC"): a thermometer icon in the toolbar with
   a popup anchored to it, styled by your Plasma theme like Weather or Media
   Player. The icon turns cold/warm while actively cooling/heating, and hovering
-  shows each unit's state. Each card
-  controls power, mode, temperature (`-` / `+`, 16-30°C) and fan. The panel
-  shows the set temperature while a unit runs, and a middle-click optionally
-  toggles both ACs (off by default; see widget settings).
+  shows each unit's state. Each card controls power, mode, target temperature
+  (16-30°C, slider plus `-` / `+` steps) and fan speed. The panel shows the set
+  temperature while a unit runs (each target when they differ), and a
+  middle-click optionally toggles both ACs (off by default; see widget
+  settings).
 - **Linked control**: a "Link both ACs" switch sends one action to both units;
   turn it off to control each AC separately.
 - **Headless daemon** owns the units and serves state over D-Bus
   (`com.greeac.Controller`); the widget polls it and sends commands back.
   Failed commands also raise a Plasma notification, so they are visible even
-  with the popup closed.
+  with the popup closed. When the daemon is not running, the popup offers a
+  Start daemon button that starts the systemd user service.
 - Follows a chosen home Wi-Fi network (shown as a HOME/AWAY badge).
 - Reads each unit's power, mode, set temperature and fan, plus the room
   temperature decoded from the unit's sensor (`TemSen` minus 40,
@@ -42,28 +44,32 @@ Set `RUST_LOG=info` (or `debug`) to see more diagnostics on stderr.
 cargo build --release
 ```
 
+The widget is plain QML and needs no build step. After a QML change, re-run
+`./plasmoid/install.sh`, which upgrades the installed widget in place. After a
+Rust change, reinstall the binary.
+
 ## Run
 
 Install the binary, start the daemon, and install the widget:
 
 ```sh
 sudo install -Dm755 target/release/gree-ac-plasma /usr/local/bin/gree-ac-plasma
-gree-ac-plasma &              # or enable the user service below
+gree-ac-plasma &            # or enable the user service, see Autostart
 ./plasmoid/install.sh       # installs the "Gree AC" widget
 ```
 
-Then right-click the panel and select **Add or manage widgets**, then **Gree AC**.
-Clicking its toolbar icon opens the popup; right-clicking it offers Refresh.
-Use Configure in the widget menu to set the helper command, poll interval,
-panel temperature, and middle-click behaviour. Defaults are helper
-`gree-ac-plasma`, poll interval 8000ms (minimum 2000ms), panel temperature
-display on, and middle-click toggle off.
+Then right-click the panel, select **Add or manage widgets**, and add
+**Gree AC**. Clicking its icon opens the popup; the button in the popup header
+re-fetches the daemon state. Use Configure in the widget's context menu to set
+the helper command, poll interval, panel temperature, and middle-click
+behaviour. Defaults: helper `gree-ac-plasma`, poll interval 8000 ms (minimum
+2000 ms), panel temperature on, middle-click toggle off.
 
 `gree-ac-plasma --daemon` is the same as bare `gree-ac-plasma`. A trailing
 `&` runs the daemon only for the current shell session; enable the user
-service below to keep it running across logins. Service logs are available
-with `journalctl --user -u gree-ac-plasma`, combined with `RUST_LOG=info`
-(or `debug`) for more detail.
+service in [Autostart](#autostart) to keep it running across logins. Service
+logs are available with `journalctl --user -u gree-ac-plasma`, combined with
+`RUST_LOG=info` (or `debug`) for more detail.
 
 ### Scripting / terminal control (talks to the running daemon)
 
@@ -126,6 +132,20 @@ edit `~/.config/gree-ac-plasma/config.json` directly to change them.
 
 ## Autostart
 
+With the binary installed (see [Run](#run)), enable the user service that keeps
+the daemon running:
+
+```sh
+install -Dm644 packaging/gree-ac-plasma.service ~/.config/systemd/user/gree-ac-plasma.service
+systemctl --user daemon-reload
+systemctl --user enable --now gree-ac-plasma.service
+```
+
+Alternatively, add the command in **System Settings > Autostart**. Pick one,
+not both.
+
+### Upgrading from gree-ac-tray
+
 When upgrading an existing install, stop the service using the previous name
 before enabling the renamed service:
 
@@ -134,20 +154,8 @@ systemctl --user disable --now gree-ac-tray.service
 ```
 
 On startup the daemon reads `~/.config/gree-ac-tray/config.json` only when
-`~/.config/gree-ac-plasma/config.json` is missing, then saves it under the
-new name. Invalid JSON falls back to defaults.
-
-Install the binary and the user service (the daemon; the widget needs it
-running):
-
-```sh
-sudo install -Dm755 target/release/gree-ac-plasma /usr/local/bin/gree-ac-plasma
-install -Dm644 packaging/gree-ac-plasma.service ~/.config/systemd/user/gree-ac-plasma.service
-systemctl --user daemon-reload
-systemctl --user enable --now gree-ac-plasma.service
-```
-
-Alternatively, add the command in **System Settings > Autostart**.
+`~/.config/gree-ac-plasma/config.json` is missing, then saves it under the new
+name. Invalid JSON falls back to defaults.
 
 ## How it works
 
@@ -155,7 +163,8 @@ Discovery is a UDP broadcast on port 7000. Controlling a unit requires a short
 `bind` handshake that negotiates a per-session key; after that, state is read
 with `status` and changed with `cmd` packets. This mirrors the community
 [`greeclimate`](https://github.com/cmroche/greeclimate) implementation and the
-`IRremoteESP8266` Gree protocol notes.
+[`IRremoteESP8266`](https://github.com/crankyoldgit/IRremoteESP8266) Gree
+protocol notes.
 
 Room temperature comes from each unit's `TemSen` sensor value minus a base
 offset of 40 (community-reversed; whole degrees only). Calibrated against a
@@ -167,6 +176,18 @@ thermometer, it reads within half a degree.
   must be off.
 - UDP broadcasts can be dropped, so discovery scans twice per run.
 
+## Uninstall
+
+```sh
+kpackagetool6 -t Plasma/Applet --remove com.greeac.ac
+systemctl --user disable --now gree-ac-plasma.service
+rm -f ~/.config/systemd/user/gree-ac-plasma.service ~/.config/gree-ac-plasma/config.json
+systemctl --user daemon-reload
+sudo rm -f /usr/local/bin/gree-ac-plasma
+```
+
 ## License
 
-MIT (c) kyan0045, see LICENSE.
+MIT (c) 2026 kyan0045. See [LICENSE](LICENSE).
+
+This project is not affiliated with or endorsed by Gree.
