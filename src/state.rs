@@ -33,5 +33,6 @@ pub struct Snapshot {
     pub home: bool,
     pub following_wifi: bool,
     pub message: Option<String>,
+    pub message_is_error: bool,
     pub units: Vec<UnitView>,
 }

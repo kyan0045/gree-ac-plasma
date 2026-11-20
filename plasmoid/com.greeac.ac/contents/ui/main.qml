@@ -13,8 +13,12 @@ PlasmoidItem {
     switchHeight: Kirigami.Units.gridUnit * 24
 
     // Last state polled from the daemon (`gree-ac-plasma --state-json`).
-    property var ac: ({ linked: true, home: true, following_wifi: false, message: "", units: [] })
+    property var ac: ({ linked: true, home: true, following_wifi: false, message: "", message_is_error: false, units: [] })
     property bool daemonOnline: false
+    property string commandError: ""
+    property string daemonStartError: ""
+    property bool daemonStarting: false
+    property string lastChecked: ""
     // Last accepted poll payload. Polls that change nothing skip the model
     // assignment below, so open popups are not torn down and rebuilt for
     // identical data.
@@ -39,22 +43,41 @@ PlasmoidItem {
         return configured !== "" ? configured : "gree-ac-plasma";
     }
 
-    // Unit shown on the shared "Both ACs" card: first online unit, else first.
+    // Unit shown on the shared "Both ACs" card: first running unit, else first with state, else first.
     readonly property var bothUnit: {
         const units = root.ac.units ?? [];
-        return units.find(u => u.state) ?? units[0] ?? null;
+        return units.find(u => u.state && u.state.power)
+            ?? units.find(u => u.state)
+            ?? units[0]
+            ?? null;
     }
+
+    readonly property string daemonError: {
+        const msg = String(root.ac.message ?? "");
+        if (msg === "") {
+            return "";
+        }
+        if (root.ac.message_is_error !== undefined) {
+            return root.ac.message_is_error ? msg : "";
+        }
+        return /^(Both ACs updated|Updated|Linked:|Unlinked:)/.test(msg) ? "" : msg;
+    }
+
+    readonly property string bannerError: root.commandError !== "" ? root.commandError : root.daemonError
 
     // Room line for the shared card, which has no per-unit object of its own.
     readonly property string bothRoomText: {
-        const r = root.bothUnit?.state?.room_celsius ?? null;
-        if (r === null || r === undefined) {
+        const units = (root.ac.units ?? []).filter(u => u.state && u.state.room_celsius !== null && u.state.room_celsius !== undefined);
+        if (units.length === 0) {
             return "";
         }
-        if (root.bothUnit.state.fahrenheit) {
-            return "Room: " + Math.round(r * 9 / 5 + 32) + "°F";
+        const formatTemp = st => st.fahrenheit
+            ? Math.round(st.room_celsius * 9 / 5 + 32) + "°F"
+            : st.room_celsius + "°C";
+        if (units.length === 1) {
+            return "Room: " + formatTemp(units[0].state);
         }
-        return "Room: " + r + "°C";
+        return units.map(u => (u.name || "Unit") + ": " + formatTemp(u.state)).join(" · ");
     }
 
     // First unit that is currently running, if any (drives the panel icon
@@ -62,6 +85,23 @@ PlasmoidItem {
     readonly property var activeUnit: {
         const units = root.ac.units ?? [];
         return units.find(u => u.state && u.state.power) ?? null;
+    }
+
+    // Panel temperature label: single value when one unit is on or all running
+    // units share a target; "22° / 24°" when running units have different targets.
+    // Includes °C/°F per reading if running units disagree on temperature scale.
+    readonly property string compactTempText: {
+        const units = (root.ac.units ?? []).filter(u => u.state && u.state.power);
+        if (units.length === 0) {
+            return "";
+        }
+        const mixedScale = units.some(u => !!u.state.fahrenheit) && units.some(u => !u.state.fahrenheit);
+        const targets = units.map(u => {
+            const t = u.state.target ?? 24;
+            return mixedScale ? (t + (u.state.fahrenheit ? "°F" : "°C")) : (t + "°");
+        });
+        const unique = targets.filter((v, i, a) => a.indexOf(v) === i);
+        return unique.join(" / ");
     }
 
     // Unit rows as a stable model. Polls sync values IN PLACE (set/append)
@@ -142,6 +182,9 @@ PlasmoidItem {
                 root.daemonOnline = false;
                 return;
             }
+            root.lastChecked = Qt.formatTime(new Date(), "HH:mm:ss");
+            root.commandError = "";
+            root.daemonStartError = "";
             if (out === root.lastStateJson) {
                 root.daemonOnline = true;
                 return;
@@ -173,15 +216,42 @@ PlasmoidItem {
             if (exitCode !== 0 || err !== "") {
                 root.failCommand(err !== "" ? err : "Command failed (exit " + exitCode + ")");
             } else {
+                root.commandError = "";
                 refreshTimer.restart();
             }
             root.pumpCommands();
         }
     }
 
+    Plasma5Support.DataSource {
+        id: daemonStartSource
+        engine: "executable"
+        connectedSources: []
+        onNewData: (sourceName, data) => {
+            daemonStartSource.disconnectSource(sourceName);
+            root.daemonStarting = false;
+            const exitCode = Number(data["exit code"] ?? 0);
+            const err = String(data["stderr"] ?? "").trim();
+            if (exitCode !== 0) {
+                root.daemonStartError = err !== "" ? err : ("systemctl exited with status " + exitCode + ".");
+            } else {
+                root.daemonStartError = "";
+                refreshTimer.restart();
+            }
+        }
+    }
+
+    function startDaemon() {
+        if (daemonStartSource.connectedSources.length === 0) {
+            root.daemonStartError = "";
+            root.daemonStarting = true;
+            daemonStartSource.connectedSources = ["systemctl --user start gree-ac-plasma"];
+        }
+    }
+
     Timer {
         id: refreshTimer
-        interval: 900
+        interval: 1200
         onTriggered: root.refresh()
     }
 
@@ -218,6 +288,10 @@ PlasmoidItem {
         }
     }
 
+    function requestRefresh() {
+        root.send("--refresh");
+    }
+
     // The helper setting must be a single binary name or path. Anything
     // with shell metacharacters is rejected so it cannot inject commands.
     function helperValid(value) {
@@ -238,9 +312,7 @@ PlasmoidItem {
 
     function failCommand(details) {
         const text = details !== "" ? details : "Command failed";
-        const next = Object.assign({}, root.ac);
-        next.message = text;
-        root.ac = next;
+        root.commandError = text;
         root.commandFailed(text);
     }
 
@@ -297,6 +369,10 @@ PlasmoidItem {
         if (units.length === 0) {
             return "No units found";
         }
-        return units.map(u => u.state ? (u.state.summary ?? "") : "offline").join(" · ");
+        let summary = units.map(u => u.state ? (u.state.summary ?? "") : "offline").join(" · ");
+        if (Plasmoid.configuration.middleClickToggles) {
+            summary += "\nMiddle-click to toggle power";
+        }
+        return summary;
     }
 }

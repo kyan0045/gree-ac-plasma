@@ -21,7 +21,7 @@ PlasmaExtras.Representation {
     Layout.preferredWidth: Kirigami.Units.gridUnit * 20
     Layout.preferredHeight: Math.min(fullRoot.heightLimit,
         (heading.visible ? heading.implicitHeight : 0)
-        + content.implicitHeight + topPadding + bottomPadding)
+        + contentBody.implicitHeight + topPadding + bottomPadding)
     Layout.maximumWidth: Kirigami.Units.gridUnit * 40
     Layout.maximumHeight: fullRoot.heightLimit
 
@@ -34,10 +34,14 @@ PlasmaExtras.Representation {
     header: PlasmaExtras.BasicPlasmoidHeading {
         id: heading
 
-        PlasmaComponents.Button {
+        PlasmaComponents.ToolButton {
             icon.name: "view-refresh"
-            text: "Refresh"
-            onClicked: root.refresh()
+            display: PlasmaComponents.AbstractButton.IconOnly
+            Accessible.name: "Refresh"
+            PlasmaComponents.ToolTip.text: "Refresh"
+            PlasmaComponents.ToolTip.visible: hovered
+            PlasmaComponents.ToolTip.delay: Kirigami.Units.toolTipDelay
+            onClicked: root.daemonOnline ? root.requestRefresh() : root.refresh()
         }
     }
 
@@ -62,24 +66,27 @@ PlasmaExtras.Representation {
                 y: Kirigami.Units.largeSpacing
                 spacing: Kirigami.Units.smallSpacing
 
-                RowLayout {
+                Kirigami.PlaceholderMessage {
+                    visible: !root.daemonOnline
                     Layout.fillWidth: true
-                    Item {
-                        Layout.fillWidth: true
-                    }
-                    PlasmaComponents.Label {
-                        visible: (root.ac.following_wifi ?? false)
-                        text: root.ac.home ? "HOME" : "AWAY"
-                        font.bold: true
-                        color: root.ac.home ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.disabledTextColor
+                    Layout.topMargin: Kirigami.Units.largeSpacing
+                    Layout.bottomMargin: Kirigami.Units.largeSpacing
+                    icon.name: "network-disconnect"
+                    text: "Daemon not running"
+                    explanation: "Start the gree-ac-plasma user service, or run gree-ac-plasma manually."
+                    helpfulAction: Kirigami.Action {
+                        icon.name: "media-playback-start"
+                        text: root.daemonStarting ? "Starting…" : "Start daemon"
+                        enabled: !root.daemonStarting
+                        onTriggered: root.startDaemon()
                     }
                 }
 
-                PlasmaComponents.Label {
-                    visible: !root.daemonOnline
+                Kirigami.InlineMessage {
+                    visible: !root.daemonOnline && root.daemonStartError !== ""
                     Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: "Daemon not running.\nStart it with: gree-ac-plasma"
+                    type: Kirigami.MessageType.Error
+                    text: root.daemonStartError
                 }
 
                 ColumnLayout {
@@ -121,15 +128,54 @@ PlasmaExtras.Representation {
                             Layout.fillWidth: true
                             text: "Link both ACs"
                         }
+                        PlasmaComponents.BusyIndicator {
+                            visible: root.commandBusy
+                            running: root.commandBusy
+                            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                        }
+                        Rectangle {
+                            visible: root.ac.following_wifi ?? false
+                            implicitWidth: badgeRow.implicitWidth + Kirigami.Units.smallSpacing * 2
+                            implicitHeight: badgeRow.implicitHeight + Kirigami.Units.smallSpacing
+                            radius: height / 2
+                            color: Qt.alpha(root.ac.home ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.disabledTextColor, 0.15)
+                            border.width: 1
+                            border.color: Qt.alpha(root.ac.home ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.disabledTextColor, 0.35)
+
+                            RowLayout {
+                                id: badgeRow
+                                anchors.centerIn: parent
+                                spacing: Kirigami.Units.smallSpacing / 2
+
+                                Kirigami.Icon {
+                                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                    source: "network-wireless-symbolic"
+                                    color: root.ac.home ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.disabledTextColor
+                                }
+                                PlasmaComponents.Label {
+                                    text: root.ac.home ? "Home" : "Away"
+                                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                    font.bold: true
+                                    color: root.ac.home ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.disabledTextColor
+                                }
+                            }
+                        }
                     }
 
-                    PlasmaComponents.Label {
-                        visible: (root.ac.message ?? "") !== ""
+                    Kirigami.InlineMessage {
+                        visible: root.bannerError !== ""
                         Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                        opacity: 0.7
-                        font.pointSize: Kirigami.Theme.smallFont.pointSize
-                        text: root.ac.message ?? ""
+                        type: Kirigami.MessageType.Error
+                        text: root.bannerError
+                        actions: [
+                            Kirigami.Action {
+                                icon.name: "view-refresh"
+                                text: "Retry"
+                                onTriggered: root.requestRefresh()
+                            }
+                        ]
                     }
 
                     PlasmaComponents.Label {
@@ -155,14 +201,16 @@ PlasmaExtras.Representation {
                             required property bool online
                             required property bool hasState
                             Layout.fillWidth: true
+                            opacity: 0.75
                             PlasmaComponents.Label {
                                 Layout.fillWidth: true
+                                font.pointSize: Kirigami.Theme.smallFont.pointSize
                                 font.bold: true
                                 elide: Text.ElideRight
                                 text: name
                             }
                             PlasmaComponents.Label {
-                                opacity: 0.75
+                                font.pointSize: Kirigami.Theme.smallFont.pointSize
                                 text: (online && hasState) ? summary : "offline"
                             }
                         }
@@ -197,6 +245,16 @@ PlasmaExtras.Representation {
                                 } : null
                             })
                         }
+                    }
+
+                    PlasmaComponents.Label {
+                        visible: root.lastChecked !== ""
+                        Layout.fillWidth: true
+                        Layout.topMargin: Kirigami.Units.smallSpacing
+                        horizontalAlignment: Text.AlignRight
+                        opacity: 0.55
+                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        text: "Checked " + root.lastChecked
                     }
                 }
             }

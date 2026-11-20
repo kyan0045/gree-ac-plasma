@@ -31,6 +31,7 @@ pub struct Controller {
     units: Vec<Unit>,
     home: bool,
     message: Option<String>,
+    message_is_error: bool,
     snapshot_tx: UnboundedSender<Snapshot>,
 }
 
@@ -41,6 +42,7 @@ impl Controller {
             units: Vec::new(),
             home: true,
             message: None,
+            message_is_error: false,
             snapshot_tx,
         }
     }
@@ -65,6 +67,8 @@ impl Controller {
                     }
                 }
                 _ = ticker.tick() => {
+                    self.message = None;
+                    self.message_is_error = false;
                     self.update_home().await;
                     self.ensure_discovered(false).await;
                     self.ensure_connected().await;
@@ -100,6 +104,7 @@ impl Controller {
             Command::Quit => {}
             Command::Refresh => {
                 self.message = None;
+                self.message_is_error = false;
                 // Re-read settings from disk (names may have changed).
                 self.config = Config::load();
                 self.update_home().await;
@@ -116,6 +121,7 @@ impl Controller {
                 } else {
                     "Unlinked: control each AC separately".to_owned()
                 });
+                self.message_is_error = false;
                 self.publish();
             }
             Command::SetPower { unit, on } => self.apply(Change::Power(on), unit).await,
@@ -128,6 +134,7 @@ impl Controller {
     async fn apply(&mut self, change: Change, unit: Option<usize>) {
         if !self.active() {
             self.message = Some("Not on the home network".to_owned());
+            self.message_is_error = true;
             self.publish();
             return;
         }
@@ -136,6 +143,7 @@ impl Controller {
             Some(index) if index < self.units.len() => vec![index],
             Some(index) => {
                 self.message = Some(format!("Unknown unit {index}"));
+                self.message_is_error = true;
                 self.publish();
                 return;
             }
@@ -143,6 +151,7 @@ impl Controller {
         };
         if targets.is_empty() {
             self.message = Some("No units available".to_owned());
+            self.message_is_error = true;
             self.publish();
             return;
         }
@@ -176,6 +185,7 @@ impl Controller {
             }
         }
 
+        self.message_is_error = !failures.is_empty();
         self.message = Some(if failures.is_empty() {
             if targets.len() > 1 {
                 "Both ACs updated".to_owned()
@@ -206,6 +216,7 @@ impl Controller {
             Err(error) => {
                 log::warn!("Discovery failed: {error}");
                 self.message = Some(format!("Discovery failed: {error}"));
+                self.message_is_error = true;
             }
         }
     }
@@ -290,6 +301,7 @@ impl Controller {
             home: self.home,
             following_wifi: self.following_wifi(),
             message: self.message.clone(),
+            message_is_error: self.message_is_error,
             units: self
                 .units
                 .iter()

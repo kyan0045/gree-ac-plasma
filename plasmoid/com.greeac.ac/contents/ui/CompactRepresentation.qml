@@ -27,9 +27,9 @@ MouseArea {
 
     // Reserve room only while the label is actually shown. When the units
     // are off there is no text, so the slot shrinks back to the icon and no
-    // empty gap remains. Both request values are stable (icon / icon + the
-    // fixed worst-case label width), never measured mid-transition.
-    Layout.preferredWidth: (showTemp && root.activeUnit !== null)
+    // empty gap remains. Digit-normalizing the active label ensures the width
+    // accommodates any number of running units without jitter on temp ticks.
+    Layout.preferredWidth: (showTemp && root.compactTempText !== "")
         ? Kirigami.Units.iconSizes.smallMedium + Kirigami.Units.smallSpacing + tempMetrics.advanceWidth
         : Kirigami.Units.iconSizes.smallMedium
 
@@ -39,7 +39,7 @@ MouseArea {
     TextMetrics {
         id: tempMetrics
         font.bold: true
-        text: "88°"
+        text: root.compactTempText !== "" ? root.compactTempText.replace(/\d/g, "8") : "88°"
     }
 
     RowLayout {
@@ -53,10 +53,10 @@ MouseArea {
             active: compactMouse.containsMouse
         }
         PlasmaComponents.Label {
-            visible: compactMouse.showTemp && root.activeUnit !== null
+            visible: compactMouse.showTemp && root.compactTempText !== ""
             font.bold: true
             elide: Text.ElideRight
-            text: root.activeUnit ? ((root.activeUnit.state.target ?? 24) + "°") : ""
+            text: root.compactTempText
         }
     }
 }

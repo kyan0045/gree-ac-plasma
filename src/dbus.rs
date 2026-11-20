@@ -53,6 +53,7 @@ struct SnapshotDto {
     home: bool,
     following_wifi: bool,
     message: Option<String>,
+    message_is_error: bool,
     units: Vec<UnitDto>,
 }
 
@@ -64,6 +65,7 @@ pub fn snapshot_json(snapshot: &Snapshot) -> String {
         home: snapshot.home,
         following_wifi: snapshot.following_wifi,
         message: snapshot.message.clone(),
+        message_is_error: snapshot.message_is_error,
         units: snapshot
             .units
             .iter()
@@ -231,5 +233,26 @@ mod tests {
     fn negative_unit_means_both() {
         assert_eq!(unit_index(-1), None);
         assert_eq!(unit_index(1), Some(1));
+    }
+
+    #[test]
+    fn snapshot_json_serializes_message_severity() {
+        let mut snapshot = Snapshot {
+            linked: true,
+            home: true,
+            following_wifi: false,
+            message: Some("Both ACs updated".to_owned()),
+            message_is_error: false,
+            units: Vec::new(),
+        };
+        let ok: serde_json::Value = serde_json::from_str(&snapshot_json(&snapshot)).unwrap();
+        assert_eq!(ok["message_is_error"], false);
+        assert_eq!(ok["message"], "Both ACs updated");
+
+        snapshot.message = Some("Failed: Kitchen".to_owned());
+        snapshot.message_is_error = true;
+        let err: serde_json::Value = serde_json::from_str(&snapshot_json(&snapshot)).unwrap();
+        assert_eq!(err["message_is_error"], true);
+        assert_eq!(err["message"], "Failed: Kitchen");
     }
 }
