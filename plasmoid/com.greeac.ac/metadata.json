@@ -11,7 +11,7 @@
         "EnabledByDefault": false,
         "Icon": "temperature-normal",
         "Id": "com.greeac.ac",
-        "License": "MIT",
+        "License": "GPL-3.0-or-later",
         "Name": "Gree AC",
         "Version": "0.1.0"
     },

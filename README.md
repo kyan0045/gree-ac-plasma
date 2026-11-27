@@ -7,6 +7,12 @@ directly over the local network using Gree's own UDP protocol.
 It was built for a pair of `GWH12AWBXB-K6DNA1F/I` units and can drive both at
 once, or each separately.
 
+## Screenshots
+
+| Linked control | Per-unit control |
+| --- | --- |
+| ![Linked control popup](docs/screenshots/popup-linked.png) | ![Per-unit control popup](docs/screenshots/popup-unlinked.png) |
+
 ## Features
 
 - **Native panel widget** ("Gree AC"): a thermometer icon in the toolbar with
@@ -38,7 +44,36 @@ Set `RUST_LOG=info` (or `debug`) to see more diagnostics on stderr.
 - Plasma 6 with `kpackagetool6` for the widget install.
 - NetworkManager for SSID detection behind the HOME/AWAY badge.
 
-## Build
+## Install
+
+### Arch Linux (AUR)
+
+Build and install the package locally from [`packaging/aur/PKGBUILD`](packaging/aur/PKGBUILD):
+
+```sh
+cd packaging/aur
+makepkg -si
+systemctl --user daemon-reload
+systemctl --user enable --now gree-ac-plasma.service
+```
+
+Then right-click the Plasma panel, select **Add or manage widgets**, and add **Gree AC**.
+
+### Linux distros (`Makefile`)
+
+Build and install system-wide (the `Makefile` respects `PREFIX` and `DESTDIR` for distro packaging):
+
+```sh
+make build
+sudo make install PREFIX=/usr
+systemctl --user daemon-reload
+systemctl --user enable --now gree-ac-plasma.service
+```
+
+> [!NOTE]
+> Flatpak is not applicable because native Plasma 6 applets must be installed on the host for `plasmashell` to load them.
+
+### Manual build and run
 
 ```sh
 cargo build --release
@@ -188,6 +223,6 @@ sudo rm -f /usr/local/bin/gree-ac-plasma
 
 ## License
 
-MIT (c) 2026 kyan0045. See [LICENSE](LICENSE).
+GPL-3.0-or-later (c) 2026 kyan0045. See [LICENSE](LICENSE).
 
 This project is not affiliated with or endorsed by Gree.

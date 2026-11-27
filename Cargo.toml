@@ -5,7 +5,7 @@ authors = ["kyan0045"]
 edition = "2024"
 rust-version = "1.89"
 description = "Controller daemon and Plasma applet backend for Gree air conditioners"
-license = "MIT"
+license = "GPL-3.0-or-later"
 repository = "https://github.com/kyan0045/gree-ac-plasma"
 readme = "README.md"
 

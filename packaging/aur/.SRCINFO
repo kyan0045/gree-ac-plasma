@@ -1,0 +1,23 @@
+pkgbase = gree-ac-plasma-git
+	pkgdesc = Rust controller daemon and native Plasma 6 applet for Gree air conditioners
+	pkgver = 0.1.0.r3.ge1f30ba
+	pkgrel = 1
+	url = https://github.com/kyan0045/gree-ac-plasma
+	install = gree-ac-plasma-git.install
+	arch = x86_64
+	arch = aarch64
+	license = GPL-3.0-or-later
+	makedepends = cargo
+	makedepends = git
+	depends = gcc-libs
+	depends = glibc
+	depends = kirigami
+	depends = libplasma
+	depends = plasma5support
+	optdepends = networkmanager: Wi-Fi SSID detection for the HOME/AWAY badge
+	provides = gree-ac-plasma
+	conflicts = gree-ac-plasma
+	source = gree-ac-plasma::git+https://github.com/kyan0045/gree-ac-plasma.git
+	sha256sums = SKIP
+
+pkgname = gree-ac-plasma-git
